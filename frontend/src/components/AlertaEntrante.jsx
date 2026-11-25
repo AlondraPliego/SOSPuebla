@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import MapView from "./MapView";
+import { instruccionesDe } from "../api/mapeos";
 
 const coloresSeveridad = {
   critica: {
@@ -23,6 +24,11 @@ const coloresSeveridad = {
     fondo: "bg-orange-600",
     badge: "bg-orange-100 text-orange-800 border-orange-200",
     etiqueta: "Alta",
+  },
+  moderada: {
+    fondo: "bg-amber-700",
+    badge: "bg-amber-100 text-amber-800 border-amber-200",
+    etiqueta: "Moderada",
   },
   preventiva: {
     fondo: "bg-amber-600",
@@ -36,13 +42,24 @@ const coloresSeveridad = {
   },
 };
 
-export default function AlertaEntrante({ alerta, onCerrar }) {
-  const [paso, setPaso] = useState("entrante");
+export default function AlertaEntrante({ alerta, onCerrar, onResponder }) {
+  // sólo el voluntario al que el backend notificó puede confirmar / hacer check-in
+  const esVoluntario = !!alerta.voluntarioNotificado;
+  const yaConfirmo = alerta.miEstado === "confirmo";
+  const [paso, setPaso] = useState(yaConfirmo ? "detalle" : "entrante");
   const [segundos, setSegundos] = useState(0);
   const [estadoVoluntario, setEstadoVoluntario] = useState("Confirmó asistencia");
-  const [confirmados, setConfirmados] = useState(alerta.voluntariosConfirmados || 14);
+  const [confirmados, setConfirmados] = useState(alerta.voluntariosConfirmados ?? 14);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState("");
+
+  // si la alerta llega actualizada desde el backend (otro voluntario confirmó), refresca el conteo
+  useEffect(() => {
+    if (alerta.voluntariosConfirmados != null) setConfirmados(alerta.voluntariosConfirmados);
+  }, [alerta.voluntariosConfirmados]);
 
   const estilo = coloresSeveridad[alerta.severidad] || coloresSeveridad.critica;
+  const protocolo = instruccionesDe(alerta.tipoClave);
 
   useEffect(() => {
     if (paso === "entrante" && navigator.vibrate) {
@@ -60,18 +77,43 @@ export default function AlertaEntrante({ alerta, onCerrar }) {
     return `${String(mins).padStart(2, "0")}:${String(resto).padStart(2, "0")}`;
   };
 
-  const confirmarAsistencia = () => {
-    setConfirmados((prev) => prev + 1);
+  const confirmarAsistencia = async () => {
+    setError("");
+    if (alerta.voluntarioNotificado && onResponder) {
+      // voluntario real notificado por el backend: registra la confirmación
+      setEnviando(true);
+      try {
+        await onResponder("confirmo");
+      } catch (e) {
+        setError(e.message || "No se pudo registrar la confirmación");
+        setEnviando(false);
+        return;
+      }
+      setEnviando(false);
+    } else {
+      setConfirmados((prev) => prev + 1);
+    }
     setEstadoVoluntario("Confirmó asistencia");
     setPaso("detalle");
+  };
+
+  const declinar = async () => {
+    if (alerta.voluntarioNotificado && onResponder) {
+      try {
+        await onResponder("declino");
+      } catch {
+        /* aunque falle, se cierra la alerta en pantalla */
+      }
+    }
+    onCerrar();
   };
 
   if (paso === "entrante") {
     return (
       <div
-        className={`fixed inset-0 z-50 flex justify-center ${estilo.fondo} text-white`}
+        className={`fixed inset-0 z-50 flex justify-center overflow-y-auto ${estilo.fondo} text-white`}
       >
-        <div className="w-full max-w-md min-h-screen flex flex-col justify-between p-6">
+        <div className="w-full max-w-md min-h-full flex flex-col justify-between p-6">
           <div className="flex items-center justify-between text-xs font-semibold opacity-90">
             <span className="uppercase tracking-wider">
               Alerta · Severidad {estilo.etiqueta}
@@ -109,24 +151,63 @@ export default function AlertaEntrante({ alerta, onCerrar }) {
             <div className="bg-black/20 border border-white/20 rounded-xl p-4 text-xs leading-relaxed text-white/95">
               {alerta.instrucciones}
             </div>
+
+            <div className="bg-white/10 border border-white/20 rounded-xl p-4 text-left">
+              <p className="text-[11px] font-black uppercase tracking-wider mb-2">{protocolo.titulo}</p>
+              <ol className="space-y-1.5 text-xs leading-snug text-white/95">
+                {protocolo.pasos.slice(0, 3).map((paso, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="w-4 h-4 rounded-full bg-white/25 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                    <span>{paso}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
           </div>
 
           <div className="space-y-3 pb-2">
+            {error && (
+              <p className="bg-black/30 rounded-xl px-3 py-2 text-xs font-semibold text-center">
+                {error}
+              </p>
+            )}
+
+            {esVoluntario ? (
+            <>
             <button
               onClick={confirmarAsistencia}
-              className="w-full flex items-center justify-center gap-2 bg-white text-gray-900 hover:bg-gray-100 font-black py-4 rounded-2xl text-sm shadow-lg active:scale-[0.98] transition"
+              disabled={enviando}
+              className="w-full flex items-center justify-center gap-2 bg-white text-gray-900 hover:bg-gray-100 disabled:opacity-70 font-black py-4 rounded-2xl text-sm shadow-lg active:scale-[0.98] transition"
             >
               <CheckCircle2 className="w-5 h-5 text-green-700" />
-              <span>CONFIRMO ASISTENCIA</span>
+              <span>{enviando ? "ENVIANDO..." : "CONFIRMO ASISTENCIA"}</span>
             </button>
 
             <button
-              onClick={onCerrar}
+              onClick={declinar}
               className="w-full flex items-center justify-center gap-2 bg-black/30 hover:bg-black/40 text-white border border-white/30 font-bold py-3.5 rounded-2xl text-xs transition"
             >
               <XCircle className="w-4 h-4" />
               <span>No puedo ahora</span>
             </button>
+            </>
+            ) : (
+            <>
+            <button
+              onClick={() => setPaso("detalle")}
+              className="w-full flex items-center justify-center gap-2 bg-white text-gray-900 hover:bg-gray-100 font-black py-4 rounded-2xl text-sm shadow-lg active:scale-[0.98] transition"
+            >
+              <MapPin className="w-5 h-5 text-guinda" />
+              <span>VER DETALLE Y PUNTO DE ENCUENTRO</span>
+            </button>
+            <button
+              onClick={onCerrar}
+              className="w-full flex items-center justify-center gap-2 bg-black/30 hover:bg-black/40 text-white border border-white/30 font-bold py-3.5 rounded-2xl text-xs transition"
+            >
+              <span>Enterado</span>
+            </button>
+            </>
+            )}
           </div>
         </div>
       </div>
@@ -134,8 +215,8 @@ export default function AlertaEntrante({ alerta, onCerrar }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-200 flex justify-center">
-      <div className="w-full max-w-md min-h-screen bg-fondo flex flex-col shadow-xl overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/40 flex justify-center">
+      <div className="w-full max-w-md lg:max-w-2xl h-full bg-fondo flex flex-col shadow-xl overflow-y-auto">
         <div className="bg-guinda text-white px-5 py-4 flex items-center justify-between">
           <div>
             <p className="text-[10px] uppercase tracking-wider text-gray-300 font-semibold">
@@ -154,8 +235,10 @@ export default function AlertaEntrante({ alerta, onCerrar }) {
         <div className="p-4 space-y-4 pb-8">
           <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-[11px] text-gray-500">Tu estado actual</p>
-              <p className="text-sm font-bold text-guinda">{estadoVoluntario}</p>
+              <p className="text-[11px] text-gray-500">{esVoluntario ? "Tu estado actual" : "Instrucciones"}</p>
+              <p className="text-sm font-bold text-guinda">
+                {esVoluntario ? estadoVoluntario : "Sigue las indicaciones de Protección Civil"}
+              </p>
             </div>
             <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${estilo.badge}`}>
               Severidad {estilo.etiqueta}
@@ -198,6 +281,7 @@ export default function AlertaEntrante({ alerta, onCerrar }) {
               </a>
             </div>
 
+            {alerta.categoriasRequeridas?.length > 0 && (
             <div className="pt-2.5 border-t border-gray-100">
               <p className="text-[11px] font-bold uppercase text-gray-600 mb-1.5">
                 Categorías solicitadas
@@ -213,6 +297,7 @@ export default function AlertaEntrante({ alerta, onCerrar }) {
                 ))}
               </div>
             </div>
+            )}
 
             <div className="pt-2.5 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-700 font-semibold">
               <Users className="w-4 h-4 text-guinda" />
@@ -220,7 +305,27 @@ export default function AlertaEntrante({ alerta, onCerrar }) {
             </div>
           </div>
 
+          {!esVoluntario && (
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm text-xs text-gray-700 leading-relaxed">
+              {alerta.instrucciones}
+            </div>
+          )}
+
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <p className="text-[11px] font-bold uppercase text-dorado mb-2">{protocolo.titulo}</p>
+            <ol className="space-y-2 text-xs text-gray-700 leading-snug">
+              {protocolo.pasos.map((paso, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="w-5 h-5 rounded-full bg-fondo border border-gray-200 text-[10px] font-bold text-guinda flex items-center justify-center shrink-0">{i + 1}</span>
+                  <span className="pt-0.5">{paso}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+
           <div className="space-y-2.5">
+            {esVoluntario && (
+            <>
             <button
               onClick={() => setEstadoVoluntario("En camino")}
               className={`w-full py-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-2 ${
@@ -244,7 +349,10 @@ export default function AlertaEntrante({ alerta, onCerrar }) {
               {estadoVoluntario === "En zona" && <Check className="w-4 h-4" />}
               <span>Llegué a la zona (Check-in)</span>
             </button>
+            </>
+            )}
 
+            {esVoluntario ? (
             <a
               href="tel:8007134147"
               className="w-full py-3 rounded-xl text-xs font-bold bg-fondo text-guinda border border-gray-300 flex items-center justify-center gap-2"
@@ -252,6 +360,15 @@ export default function AlertaEntrante({ alerta, onCerrar }) {
               <PhoneCall className="w-4 h-4" />
               <span>Contactar coordinador</span>
             </a>
+            ) : (
+            <a
+              href="tel:911"
+              className="w-full py-3 rounded-xl text-xs font-bold bg-fondo text-guinda border border-gray-300 flex items-center justify-center gap-2"
+            >
+              <PhoneCall className="w-4 h-4" />
+              <span>Llamar al 911</span>
+            </a>
+            )}
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   MapPin,
   Clock,
@@ -10,11 +10,33 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import { centrosAcopioPuebla, catalogoAportaciones } from "../data/pueblaData";
+import { catalogoAportaciones } from "../data/pueblaData";
 import MapView from "../components/MapView";
+import { api } from "../api/client";
+import { PRIORIDADES } from "../api/mapeos";
+
+const estiloPrioridad = {
+  urgente: "bg-red-50 text-red-800 border-red-200",
+  normal: "bg-fondo text-gray-700 border-gray-200",
+  suficiente: "bg-green-50 text-green-800 border-green-200",
+};
 
 export default function Acopio() {
-  const [centroSeleccionado, setCentroSeleccionado] = useState(centrosAcopioPuebla[0]);
+  const [centrosAcopioPuebla, setCentros] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState("");
+  const [centroSeleccionado, setCentroSeleccionado] = useState(null);
+
+  useEffect(() => {
+    api
+      .centros()
+      .then((lista) => {
+        setCentros(lista);
+        setCentroSeleccionado(lista.find((c) => c.abierto) || lista[0] || null);
+      })
+      .catch((e) => setErrorCarga(e.message))
+      .finally(() => setCargando(false));
+  }, []);
   const [tipoAporte, setTipoAporte] = useState("comida");
   const [itemsSeleccionados, setItemsSeleccionados] = useState([]);
   const [monto, setMonto] = useState("200");
@@ -52,8 +74,21 @@ export default function Acopio() {
     setNombreDonante("");
   };
 
+  if (cargando || errorCarga || !centroSeleccionado) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm text-xs text-gray-600">
+        {cargando
+          ? "Cargando centros de acopio..."
+          : errorCarga
+          ? `No se pudieron cargar los centros de acopio: ${errorCarga}`
+          : "Aún no hay centros de acopio registrados."}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+      <div className="space-y-5">
       <MapView
         puntos={centrosAcopioPuebla}
         seleccionado={centroSeleccionado}
@@ -240,6 +275,8 @@ export default function Acopio() {
         )}
       </section>
 
+      </div>
+
       <section className="space-y-3">
         <h2 className="text-xs font-bold uppercase tracking-wide text-gray-600">
           Centros de Acopio Habilitados en Puebla ({centrosAcopioPuebla.length})
@@ -255,7 +292,18 @@ export default function Acopio() {
                 esActivo ? "border-guinda ring-1 ring-guinda/30" : "border-gray-200"
               }`}
             >
-              <h3 className="font-bold text-gray-900 text-sm">{centro.nombre}</h3>
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-bold text-gray-900 text-sm">{centro.nombre}</h3>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                    centro.abierto
+                      ? "bg-green-50 text-green-800 border-green-200"
+                      : "bg-gray-100 text-gray-600 border-gray-200"
+                  }`}
+                >
+                  {centro.abierto ? "Abierto" : "Cerrado"}
+                </span>
+              </div>
 
               <p className="text-xs text-gray-600 mt-1 flex items-start gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-guinda shrink-0 mt-0.5" />
@@ -270,10 +318,14 @@ export default function Acopio() {
               <div className="flex flex-wrap gap-1.5 mt-2.5">
                 {centro.necesidades.map((nec) => (
                   <span
-                    key={nec}
-                    className="text-[10px] bg-fondo text-gray-700 border border-gray-200 px-2 py-0.5 rounded-md"
+                    key={nec.id}
+                    title={PRIORIDADES[nec.prioridad] || nec.prioridad}
+                    className={`text-[10px] border px-2 py-0.5 rounded-md ${
+                      estiloPrioridad[nec.prioridad] || estiloPrioridad.normal
+                    }`}
                   >
-                    {nec}
+                    {nec.item}
+                    {nec.prioridad === "urgente" && " · Urgente"}
                   </span>
                 ))}
               </div>

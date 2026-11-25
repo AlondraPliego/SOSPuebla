@@ -15,7 +15,8 @@ export default function Refugios() {
       : refugiosPuebla.filter((r) => r.municipio === municipioFiltro);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-5 lg:gap-6 lg:items-start">
+      <div className="space-y-4 lg:col-span-3 lg:sticky lg:top-36">
       <MapView
         puntos={refugiosFiltrados}
         seleccionado={seleccionado}
@@ -38,11 +39,14 @@ export default function Refugios() {
         ))}
       </div>
 
+      </div>
+
+      <div className="space-y-4 lg:col-span-2">
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-bold uppercase tracking-wide text-gray-600">
           Refugios Temporales en Puebla ({refugiosFiltrados.length})
         </h2>
-        <span className="text-[11px] text-gray-500">Toca uno para ubicar</span>
+        <span className="text-[11px] text-gray-500">Selecciona uno para ubicar</span>
       </div>
 
       <div className="space-y-3">
@@ -132,6 +136,7 @@ export default function Refugios() {
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

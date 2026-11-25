@@ -52,7 +52,7 @@ export default function Preparate() {
   const progreso = Math.round((marcados.length / itemsMochila.length) * 100);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 md:max-w-3xl md:mx-auto">
       <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-600">
         <WifiOff className="w-4 h-4 text-guinda shrink-0" />
         <span>Guías guardadas para consulta sin conexión en zonas rurales y urbanas.</span>

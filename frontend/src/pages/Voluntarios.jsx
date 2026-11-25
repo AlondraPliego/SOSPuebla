@@ -1,4 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { api } from "../api/client";
+import { iniciarSesionApp } from "../components/MiCuenta";
+import RadarDijes from "../components/RadarDijes";
+import { MUNICIPIOS, etiquetaCategoria } from "../api/mapeos";
 import {
   Flame,
   Shield,
@@ -174,6 +178,50 @@ const municipiosPuebla = [
   "Tehuacán",
 ];
 
+// Equivalencia entre los tipos de voluntariado de la app y las categorías del backend.
+const categoriaBackend = {
+  brigadista: "busqueda_rescate",
+  prevencion: "otro",
+  vigilancia: "comunicaciones",
+  primeros_auxilios: "primeros_auxilios",
+  abastecimiento: "logistica_acopio",
+  evacuacion: "traslado",
+  comunicacion: "comunicaciones",
+  tecnologico: "comunicaciones",
+  rescate_animal: "otro",
+  restauracion: "otro",
+};
+
+const disponibilidadBackend = {
+  Inmediata: "siempre",
+  "Fines de semana": "fines_de_semana",
+  "Solo en contingencia": "solo_criticas",
+};
+
+// "Puebla Capital" se guarda como "Puebla" (así lo usa el backend en sus datos)
+const municipioBackend = (m) => (m === "Puebla Capital" ? "Puebla" : m);
+const coordenadasMunicipio = (m) =>
+  MUNICIPIOS.find((x) => x.nombre === municipioBackend(m)) || MUNICIPIOS[0];
+
+/** Convierte el VoluntarioDto del backend al formato del gafete digital. */
+function perfilParaGafete(v) {
+  const [titulo, aportesTexto] = (v.experiencia || "").split(": ");
+  return {
+    id: v.id,
+    nombre: [v.nombre, v.apellidos].filter(Boolean).join(" "),
+    curp: v.extranjero ? `${v.tipo_documento || "Documento"} ${v.numero_documento || ""}` : v.curp || "—",
+    categoria: aportesTexto !== undefined ? titulo : (v.categorias || []).map(etiquetaCategoria).join(", "),
+    aportes: aportesTexto ? aportesTexto.split(" · ") : [],
+    municipio: v.municipio,
+    folio: `VOL-PUE-${String(v.id).padStart(4, "0")}`,
+    estatus: v.estatus_aprobacion,
+    disponible: v.disponible,
+    apoyos: 0,
+    horas: 0,
+    nivel: "Voluntario Activo",
+  };
+}
+
 const brigadasActivas = [
   {
     id: 1,
@@ -241,10 +289,25 @@ const rankingInicial = [
   },
 ];
 
-export default function Voluntarios() {
+/**
+ * Portal de voluntarios.
+ *  - visitante / ciudadano: información y registro como voluntario (el inicio de sesión está en "Mi cuenta")
+ *  - voluntario: gafete digital, disponibilidad, brigadas y reconocimientos
+ */
+export default function Voluntarios({ sesion, onSesion, onAbrirCuenta, modoInicial = "info" }) {
   const [sesionActiva, setSesionActiva] = useState(null);
-  const [modoAcceso, setModoAcceso] = useState("login");
-  const [curpLogin, setCurpLogin] = useState("");
+  const [modoAcceso, setModoAcceso] = useState(modoInicial); // info | registro
+  const esCiudadano = sesion?.rol === "ciudadano";
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState("");
+
+  const [apellidos, setApellidos] = useState("");
+  const [correo, setCorreo] = useState("");
+  const [password, setPassword] = useState("");
+  const [extranjero, setExtranjero] = useState(false);
+  const [tipoDocumento, setTipoDocumento] = useState("Pasaporte");
+  const [numeroDocumento, setNumeroDocumento] = useState("");
+  const [paisOrigen, setPaisOrigen] = useState("");
 
   const [tabPanel, setTabPanel] = useState("panel");
   const [brigadasConfirmadas, setBrigadasConfirmadas] = useState([]);
@@ -275,55 +338,81 @@ export default function Voluntarios() {
     );
   };
 
-  const iniciarSesion = (e) => {
-    e.preventDefault();
-    const curpLimpia = curpLogin.toUpperCase();
-    const encontrado = ranking.find((r) => r.curp === curpLimpia);
-
-    if (encontrado) {
-      setSesionActiva(encontrado);
-    } else {
-      setSesionActiva({
-        id: Date.now(),
-        nombre: "Voluntario Verificado",
-        curp: curpLimpia,
-        categoria: "Brigadista",
-        municipio: "Puebla Capital",
-        folio: "VOL-PUE-2026",
-        aportes: ["Sé cómo actuar en caso de fuego"],
-        apoyos: 3,
-        horas: 12,
-        nivel: "Voluntario Activo",
-      });
+  // Carga el perfil real del voluntario cuando hay sesión guardada
+  const voluntarioId = sesion?.rol === "voluntario" ? sesion.voluntario_id ?? null : null;
+  useEffect(() => {
+    if (voluntarioId == null) {
+      setSesionActiva(null);
+      return;
     }
-    setTabPanel("panel");
+    let vigente = true;
+    api
+      .voluntario(voluntarioId)
+      .then((v) => vigente && setSesionActiva(perfilParaGafete(v)))
+      .catch((e) => {
+        if (!vigente) return;
+        setError(e.message);
+        if (e.status === 401 || e.status === 403 || e.status === 404) onSesion(null);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [voluntarioId]);
+
+  // tras registrarse, entra con la nueva cuenta de voluntario
+  const entrar = async (identificador, pass, nombreCompleto) => {
+    const r = await iniciarSesionApp(identificador, pass);
+    onSesion({ ...r, nombre: nombreCompleto });
   };
 
-  const handleRegistro = (e) => {
+  const handleRegistro = async (e) => {
     e.preventDefault();
-    const nuevoFolio = `VOL-PUE-${Math.floor(2000 + Math.random() * 7999)}`;
+    setError("");
     const listaAportes = otroAporte.trim()
       ? [...aportesSeleccionados, otroAporte.trim()]
       : aportesSeleccionados;
+    const coords = coordenadasMunicipio(municipio);
 
-    const nuevoVoluntario = {
-      id: Date.now(),
-      folio: nuevoFolio,
-      nombre,
-      curp: curp.toUpperCase(),
+    const datos = {
+      nombre: nombre.trim(),
+      apellidos: apellidos.trim(),
       telefono,
-      municipio,
-      disponibilidad,
-      categoria: categoriaActiva.titulo,
-      aportes: listaAportes,
-      apoyos: 1,
-      horas: 4,
-      nivel: "Nuevo Brigadista",
+      correo: correo.trim(),
+      password,
+      extranjero,
+      curp: extranjero ? null : curp.toUpperCase(),
+      tipo_documento: extranjero ? tipoDocumento : null,
+      numero_documento: extranjero ? numeroDocumento.trim() : null,
+      pais_origen: extranjero ? paisOrigen.trim() : null,
+      municipio: municipioBackend(municipio),
+      lat: coords.lat,
+      lng: coords.lng,
+      categorias: [categoriaBackend[categoriaId] || "otro"],
+      experiencia: `${categoriaActiva.titulo}: ${listaAportes.join(" · ")}`,
+      disponibilidad: disponibilidadBackend[disponibilidad] || "siempre",
     };
 
-    setRanking((prev) => [...prev, nuevoVoluntario]);
-    setSesionActiva(nuevoVoluntario);
-    setTabPanel("panel");
+    setCargando(true);
+    try {
+      const v = await api.registrarVoluntario(datos);
+      setRanking((prev) => [...prev, { ...perfilParaGafete(v), apoyos: 1, horas: 4, nivel: "Nuevo Brigadista" }]);
+      await entrar(datos.correo, password, `${datos.nombre} ${datos.apellidos}`.trim());
+      setTabPanel("panel");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const cambiarDisponible = async () => {
+    if (!sesionActiva) return;
+    try {
+      const v = await api.disponibilidadVoluntario(sesionActiva.id, !sesionActiva.disponible);
+      setSesionActiva(perfilParaGafete(v));
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   const toggleBrigada = (id) => {
@@ -333,75 +422,104 @@ export default function Voluntarios() {
   };
 
   const cerrarSesion = () => {
+    onSesion(null);
     setSesionActiva(null);
-    setModoAcceso("login");
-    setCurpLogin("");
+    setModoAcceso("info");
+    setError("");
   };
 
-  if (!sesionActiva && modoAcceso === "login") {
+  const avisoError = error && (
+    <div className="bg-red-50 border border-red-200 text-red-800 text-xs rounded-lg px-3 py-2">
+      {error}
+    </div>
+  );
+
+  if (voluntarioId != null && !sesionActiva) {
     return (
-      <div className="space-y-4">
-        <div className="bg-guinda text-white rounded-2xl p-5 shadow-sm space-y-2">
-          <p className="text-[11px] uppercase tracking-wider text-gray-300 font-semibold">
-            Acceso Exclusivo · Brigadas Puebla
+      <div className="space-y-3">
+        {avisoError}
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm text-xs text-gray-600">
+          Cargando tu perfil de voluntario...
+        </div>
+        <button onClick={cerrarSesion} className="text-xs font-bold text-guinda hover:underline">
+          Cerrar sesión
+        </button>
+      </div>
+    );
+  }
+
+  if (!sesionActiva && modoAcceso === "info") {
+    return (
+      <div className="space-y-4 md:max-w-3xl md:mx-auto">
+        <div className="bg-guinda text-white rounded-2xl p-5 md:p-7 shadow-sm space-y-2">
+          <p className="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">
+            Brigadas Puebla · Voluntariado
           </p>
-          <h2 className="text-lg font-bold">Panel de Voluntarios</h2>
-          <p className="text-xs text-gray-300 leading-relaxed">
-            Inicia sesión con tu CURP para acceder a tu gafete digital, confirmar asistencia en brigadas y consultar tus reconocimientos.
+          <h2 className="text-lg md:text-2xl font-bold">Súmate como voluntario</h2>
+          <p className="text-xs md:text-sm text-gray-300 leading-relaxed">
+            Recibe alertas cercanas a tu ubicación, confirma tu apoyo en emergencias, únete a brigadas y obtén tu gafete digital y reconocimientos.
           </p>
+          <div className="flex flex-col sm:flex-row gap-2 pt-2">
+            <button
+              onClick={() => {
+                setError("");
+                setModoAcceso("registro");
+              }}
+              className="flex-1 bg-white text-guinda hover:bg-gray-100 font-bold py-3 rounded-xl text-xs transition"
+            >
+              Quiero ser voluntario
+            </button>
+            {!sesion && (
+              <button
+                onClick={onAbrirCuenta}
+                className="flex-1 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold py-3 rounded-xl text-xs transition"
+              >
+                Ya soy voluntario · Iniciar sesión
+              </button>
+            )}
+          </div>
         </div>
 
-        <form
-          onSubmit={iniciarSesion}
-          className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-3"
-        >
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Ingresa tu CURP (18 caracteres)
-            </label>
-            <input
-              type="text"
-              required
-              minLength={18}
-              maxLength={18}
-              value={curpLogin}
-              onChange={(e) => setCurpLogin(e.target.value.toUpperCase())}
-              placeholder="Ej. LOHM980512MPLRZN04"
-              className="w-full px-3 py-2.5 text-xs uppercase font-mono border border-gray-300 rounded-lg focus:outline-none focus:border-guinda"
-            />
+        {esCiudadano && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl p-3 leading-relaxed">
+            Tienes una cuenta ciudadana. El gafete, las brigadas y la confirmación de alertas son exclusivos de voluntarios aprobados por Protección Civil. Para participar, regístrate como voluntario con otro correo.
           </div>
+        )}
 
-          <button
-            type="submit"
-            className="w-full bg-guinda hover:bg-guindaDark text-white font-bold py-3 rounded-xl text-xs transition"
-          >
-            Entrar al Panel de Voluntario
-          </button>
-
-          <div className="pt-2 border-t border-gray-100 text-center">
-            <button
-              type="button"
-              onClick={() => setModoAcceso("registro")}
-              className="text-xs font-bold text-guinda hover:underline"
-            >
-              ¿Aún no eres voluntario? Regístrate aquí
-            </button>
-          </div>
-        </form>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {categorias.slice(0, 8).map((cat) => {
+            const Icon = cat.icon;
+            return (
+              <div key={cat.id} className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
+                <Icon className="w-4 h-4 text-guinda" />
+                <p className="text-xs font-bold text-gray-900 mt-1.5 leading-tight">{cat.titulo}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">{cat.actividad}</p>
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   }
 
   if (!sesionActiva && modoAcceso === "registro") {
     return (
-      <form onSubmit={handleRegistro} className="space-y-4">
+      <form onSubmit={handleRegistro} className="space-y-4 md:max-w-3xl md:mx-auto">
+        {esCiudadano && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl p-3">
+            Usa un correo distinto al de tu cuenta ciudadana. Al terminar entrarás con tu nueva cuenta de voluntario.
+          </div>
+        )}
         <button
           type="button"
-          onClick={() => setModoAcceso("login")}
+          onClick={() => {
+            setError("");
+            setModoAcceso("info");
+          }}
           className="flex items-center gap-1.5 text-xs font-bold text-guinda hover:underline"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Volver a Inicio de Sesión</span>
+          <span>Volver</span>
         </button>
 
         <section className="space-y-2.5">
@@ -409,7 +527,7 @@ export default function Voluntarios() {
             1. Selecciona tu tipo de voluntariado
           </h2>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {categorias.map((cat) => {
               const Icon = cat.icon;
               const activa = categoriaId === cat.id;
@@ -497,18 +615,83 @@ export default function Voluntarios() {
 
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Nombre completo
+              Nombre(s)
             </label>
             <input
               type="text"
               required
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              placeholder="Ej. María López Hernández"
+              placeholder="Ej. María"
               className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-guinda"
             />
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Apellidos
+            </label>
+            <input
+              type="text"
+              required
+              value={apellidos}
+              onChange={(e) => setApellidos(e.target.value)}
+              placeholder="Ej. López Hernández"
+              className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-guinda"
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-xs font-semibold text-gray-700">
+            <input
+              type="checkbox"
+              checked={extranjero}
+              onChange={(e) => setExtranjero(e.target.checked)}
+              className="accent-guinda"
+            />
+            <span>Soy extranjero (no tengo CURP)</span>
+          </label>
+
+          {extranjero ? (
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Documento
+                </label>
+                <select
+                  value={tipoDocumento}
+                  onChange={(e) => setTipoDocumento(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs border border-gray-300 rounded-lg bg-white focus:outline-none focus:border-guinda"
+                >
+                  <option value="Pasaporte">Pasaporte</option>
+                  <option value="Tarjeta de residente">Tarjeta de residente</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Número
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={numeroDocumento}
+                  onChange={(e) => setNumeroDocumento(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-mono border border-gray-300 rounded-lg focus:outline-none focus:border-guinda"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  País de origen
+                </label>
+                <input
+                  type="text"
+                  value={paisOrigen}
+                  onChange={(e) => setPaisOrigen(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-guinda"
+                />
+              </div>
+            </div>
+          ) : (
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">
               CURP (18 caracteres)
@@ -522,6 +705,35 @@ export default function Voluntarios() {
               onChange={(e) => setCurp(e.target.value.toUpperCase())}
               placeholder="Ej. LOHM980512MPLRZN04"
               className="w-full px-3 py-2 text-xs uppercase font-mono border border-gray-300 rounded-lg focus:outline-none focus:border-guinda"
+            />
+          </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Correo electrónico
+            </label>
+            <input
+              type="email"
+              required
+              value={correo}
+              onChange={(e) => setCorreo(e.target.value)}
+              placeholder="Ej. maria@correo.com"
+              className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-guinda"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Contraseña (mínimo 6 caracteres)
+            </label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-guinda"
             />
           </div>
 
@@ -573,11 +785,14 @@ export default function Voluntarios() {
             </div>
           </div>
 
+          {avisoError}
+
           <button
             type="submit"
-            className="w-full bg-guinda hover:bg-guindaDark text-white font-bold py-3 rounded-xl text-xs transition mt-2"
+            disabled={cargando}
+            className="w-full bg-guinda hover:bg-guindaDark disabled:bg-gray-400 text-white font-bold py-3 rounded-xl text-xs transition mt-2"
           >
-            Completar Registro y Entrar al Panel
+            {cargando ? "Registrando..." : "Completar Registro y Entrar al Panel"}
           </button>
         </section>
       </form>
@@ -585,7 +800,7 @@ export default function Voluntarios() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 md:max-w-3xl md:mx-auto">
       <div className="flex items-center justify-between gap-2">
         <div className="grid grid-cols-2 gap-2 flex-1">
           <button
@@ -644,6 +859,49 @@ export default function Voluntarios() {
               <span>Folio: {sesionActiva.folio}</span>
             </div>
           </div>
+
+          {avisoError}
+
+          {sesionActiva.estatus !== "aprobado" && (
+            <div
+              className={`rounded-xl p-3 text-xs border ${
+                sesionActiva.estatus === "rechazado"
+                  ? "bg-red-50 border-red-200 text-red-800"
+                  : "bg-amber-50 border-amber-200 text-amber-800"
+              }`}
+            >
+              {sesionActiva.estatus === "rechazado"
+                ? "Tu solicitud de voluntariado fue rechazada por Protección Civil."
+                : "Tu registro está en revisión. Recibirás alertas cuando Protección Civil apruebe tu solicitud."}
+            </div>
+          )}
+
+          <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-sm flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-gray-900">Disponible para alertas</p>
+              <p className="text-[11px] text-gray-500">
+                {sesionActiva.disponible
+                  ? "Recibirás alertas cercanas a tu ubicación."
+                  : "No recibirás alertas mientras esté desactivado."}
+              </p>
+            </div>
+            <button
+              onClick={cambiarDisponible}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 transition ${
+                sesionActiva.disponible ? "bg-green-700 text-white" : "bg-gray-200 text-gray-700"
+              }`}
+            >
+              {sesionActiva.disponible ? "Disponible" : "No disponible"}
+            </button>
+          </div>
+
+          {sesionActiva.estatus === "aprobado" ? (
+            <RadarDijes />
+          ) : (
+            <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-4 text-[11px] text-gray-500">
+              El <strong>radar de dijes</strong> (localizar personas con señal SOS en morse) se habilita cuando Protección Civil aprueba tu registro.
+            </div>
+          )}
 
           <section className="space-y-2.5">
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-700">

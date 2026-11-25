@@ -32,7 +32,7 @@ export default function MapView({ puntos, seleccionado, onSelect }) {
   const centroActivo = seleccionado ? [seleccionado.lat, seleccionado.lng] : null;
 
   return (
-    <div className="w-full h-56 rounded-xl overflow-hidden border border-gray-200 shadow-sm relative z-10">
+    <div className="w-full h-56 md:h-72 lg:h-96 rounded-2xl overflow-hidden border border-gray-200 shadow-sm relative z-10">
       <MapContainer
         center={centroInicial}
         zoom={11}

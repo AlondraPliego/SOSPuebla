@@ -8,7 +8,7 @@ export default function Centros() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2 lg:max-w-md">
         <button
           onClick={() => setSubVista("refugios")}
           className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold border transition ${

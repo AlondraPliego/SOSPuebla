@@ -73,8 +73,8 @@ export default function Monitoreo() {
       : { texto: "Sin Lluvia", estilo: "bg-gray-100 text-gray-700 border-gray-200" };
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
+    <section className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4">
+      <div className="flex items-center justify-between md:col-span-2 lg:col-span-3">
         <h2 className="text-xs font-bold uppercase tracking-wide text-gray-700">
           Monitoreo Real · Puebla
         </h2>
