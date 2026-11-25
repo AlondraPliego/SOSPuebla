@@ -2,6 +2,10 @@ import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { iniciarSesionApp } from "../components/MiCuenta";
 import RadarDijes from "../components/RadarDijes";
+import { fondoConGradiente } from "../components/Header";
+
+// Fondo de la tarjeta "Súmate como voluntario"
+const imagenSumate = "https://enlineapuebla.com/wp-content/uploads/2025/10/WhatsApp-Image-2025-10-22-at-6.18.44-PM.jpeg";
 import PuntoEncuentroVoluntario from "../components/PuntoEncuentroVoluntario";
 import { MUNICIPIOS, etiquetaCategoria } from "../api/mapeos";
 import {
@@ -454,7 +458,10 @@ export default function Voluntarios({ sesion, onSesion, onAbrirCuenta, modoInici
   if (!sesionActiva && modoAcceso === "info") {
     return (
       <div className="space-y-4 md:max-w-3xl md:mx-auto">
-        <div className="bg-guinda text-white rounded-2xl p-5 md:p-7 shadow-sm space-y-2">
+        <div
+          className="bg-guinda text-white rounded-2xl p-5 md:p-7 shadow-sm space-y-2 overflow-hidden"
+          style={fondoConGradiente(imagenSumate)}
+        >
           <p className="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">
             Brigadas Puebla · Voluntariado
           </p>

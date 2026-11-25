@@ -9,6 +9,24 @@ const titulos = {
   comunidad: "Encuentra tu Comunidad",
 };
 
+// Imagen de fondo por sección (Wikimedia Commons, licencias libres).
+// Cambia cualquier link aquí; ?width= pide una versión ligera.
+
+export const imagenesHeader = {
+  monitoreo: "https://t4.ftcdn.net/jpg/00/01/31/29/240_F_1312919_1tcVNtl91Gl9NOunf2Hnf2HIJph5Jq.jpg",
+  centros: "https://www.poblanerias.com/wp-content/archivos/2023/10/centro-de-acopio-para-acapulco-puebla-1021x580.jpg",
+  preparate: "https://josecardenas.com/wp-content/uploads/2020/12/2-28.jpg",
+  voluntarios: "https://i.pinimg.com/736x/ca/2d/82/ca2d823db48fac7e3d019aa943722ed3.jpg",
+  comunidad: "https://editorial01.shutterstock.com/preview-440/10603099e/b7e581bb/Shutterstock_10603099e.jpg",
+};
+
+// Oscurece la foto: más sólido a la izquierda (donde va el texto) y abajo.
+export const fondoConGradiente = (url) => ({
+  backgroundImage: `linear-gradient(90deg, rgba(9,9,11,0.92) 0%, rgba(9,9,11,0.72) 50%, rgba(9,9,11,0.45) 100%), linear-gradient(0deg, rgba(9,9,11,0.55) 0%, rgba(9,9,11,0) 60%), url("${url}")`,
+  backgroundSize: "cover",
+  backgroundPosition: "center",
+});
+
 const iniciales = (nombre) =>
   (nombre || "")
     .split(" ")
@@ -44,7 +62,10 @@ function BotonCuenta({ sesion, onOpenCuenta, compacto }) {
 
 export default function Header({ vistaActual, setVistaActual, onOpenSOS, onOpenCuenta, sesion }) {
   return (
-    <header className="bg-guinda text-white lg:sticky lg:top-0 lg:z-30 rounded-b-3xl lg:rounded-none shadow-sm">
+    <header
+      className="bg-guinda text-white lg:sticky lg:top-0 lg:z-30 rounded-b-3xl lg:rounded-none shadow-sm overflow-hidden transition-[background-image] duration-500"
+      style={fondoConGradiente(imagenesHeader[vistaActual] || imagenesHeader.monitoreo)}
+    >
       <div className="max-w-6xl mx-auto px-5 lg:px-8 pt-6 pb-5 lg:py-3.5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
