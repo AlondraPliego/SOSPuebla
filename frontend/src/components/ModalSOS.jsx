@@ -1,11 +1,27 @@
 import { useEffect, useState } from "react";
 import { X, Radio, CheckCircle2, MapPin, Phone, MessageCircle, Loader2 } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 import { api, sesiones } from "../api/client";
 import { suscribir } from "../api/realtime";
 import { TIPOS_SOS, ESTADOS_SOS, etiquetaTipoSos } from "../api/mapeos";
 
 /** Pide la ubicación GPS del navegador; resuelve null si no hay permiso o tarda demasiado. */
-export function obtenerUbicacion() {
+/**
+ * Ubicación GPS. En la app de Android usa el plugin nativo (pide el permiso de ubicación del
+ * sistema); en el navegador, la API web. Resuelve null si no hay permiso o tarda demasiado.
+ */
+export async function obtenerUbicacion() {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const permiso = await Geolocation.requestPermissions();
+      if (permiso.location !== "granted" && permiso.coarseLocation !== "granted") return null;
+      const p = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+      return { lat: p.coords.latitude, lng: p.coords.longitude };
+    } catch {
+      return null;
+    }
+  }
   return new Promise((resolve) => {
     if (!navigator.geolocation) return resolve(null);
     navigator.geolocation.getCurrentPosition(

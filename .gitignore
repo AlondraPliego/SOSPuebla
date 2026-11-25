@@ -1,0 +1,9 @@
+# Secretos: nunca subir a GitHub
+deploy/sos.env
+*.pem
+*.env
+!*.env.example
+
+# Compilados
+backend/NACIONAL-PROYECTO/target/
+frontend/dist/

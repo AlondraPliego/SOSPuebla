@@ -18,5 +18,8 @@ export default defineConfig({
       '/ws': { target: BACKEND, ws: true, changeOrigin: true },
     },
     allowedHosts: true,
+    // escucha en la red local para abrir la app desde el teléfono: http://<IP-de-tu-compu>:5173
+    host: true,
+    port: 5173,
   },
 })

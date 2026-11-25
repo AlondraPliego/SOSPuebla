@@ -19,6 +19,9 @@ import { alertaParaApp, alertaGenerica } from "./api/mapeos";
 import { distanciaKm } from "./data/localidades";
 import { mismoMunicipio } from "./panel/alcance";
 
+// Centro de Mando: en la web es /panel; en la app de Android se abre en el navegador (VITE_PANEL_URL)
+const URL_PANEL = import.meta.env.VITE_PANEL_URL || "/panel";
+
 /** Sesión guardada de la app, sólo si es de un rol de la app (ciudadano / voluntario). */
 const sesionInicial = () => {
   const s = sesiones.app();
@@ -210,7 +213,7 @@ export default function App() {
 
         <p className="lg:hidden text-center text-[11px] text-gray-400 mt-8">
           ¿Eres personal de Protección Civil?{" "}
-          <a href="/panel" className="font-semibold text-gray-500 underline">
+          <a href={URL_PANEL} className="font-semibold text-gray-500 underline">
             Acceso institucional
           </a>
         </p>
@@ -234,7 +237,7 @@ export default function App() {
           </div>
           <div className="space-y-1.5">
             <p className="text-white font-bold">Personal institucional</p>
-            <a href="/panel" className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold px-3 py-2 rounded-lg transition">
+            <a href={URL_PANEL} className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold px-3 py-2 rounded-lg transition">
               <Building2 className="w-4 h-4" /> Acceso al Centro de Mando
             </a>
           </div>

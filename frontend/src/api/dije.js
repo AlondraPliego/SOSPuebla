@@ -12,11 +12,20 @@
 // Requisitos de Web Bluetooth: Chrome/Edge (Android, Windows, macOS, ChromeOS) y página en
 // HTTPS o localhost. iPhone no lo soporta en Safari/Chrome (se puede usar el navegador "Bluefy").
 
+import { Capacitor } from "@capacitor/core";
+
 export const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 export const CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
 /** ¿Este navegador puede usar Bluetooth? Devuelve { ok, motivo }. */
 export function bluetoothDisponible() {
+  // Dentro de la app de Android (WebView) no existe Web Bluetooth: el dije se usa desde Chrome
+  if (Capacitor.isNativePlatform()) {
+    return {
+      ok: false,
+      motivo: "En la app de Android el dije aún no está disponible. Ábrelo desde Chrome en el sitio web de SOS Puebla.",
+    };
+  }
   if (typeof navigator === "undefined" || !navigator.bluetooth) {
     const ios = /iPhone|iPad|iPod/i.test(navigator?.userAgent || "");
     return {

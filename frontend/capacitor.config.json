@@ -1,0 +1,11 @@
+{
+  "appId": "mx.gob.puebla.sos",
+  "appName": "SOS Puebla",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
