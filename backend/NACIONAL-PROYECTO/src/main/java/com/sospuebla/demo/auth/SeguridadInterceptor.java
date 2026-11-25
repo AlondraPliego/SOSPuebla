@@ -40,6 +40,16 @@ public class SeguridadInterceptor implements HandlerInterceptor {
       regla("POST", "/sos/{id}/cancelar", Acceso.AUTENTICADO),
       regla("GET", "/sos", Acceso.STAFF),
       regla("*", "/sos/**", Acceso.STAFF),
+      // Operadores municipales: solicitud pública; listar/aprobar lo valida el controlador (sólo admin)
+      regla("POST", "/operadores/registro", Acceso.PUBLICO),
+      regla("*", "/operadores/**", Acceso.STAFF),
+      // Territorio: lectura pública; altas, cambios y bajas sólo personal (y por municipio, en el controlador)
+      regla("GET", "/refugios", Acceso.PUBLICO),
+      regla("GET", "/zonas-riesgo", Acceso.PUBLICO),
+      regla("GET", "/puntos-encuentro", Acceso.PUBLICO),
+      regla("*", "/refugios/**", Acceso.STAFF),
+      regla("*", "/zonas-riesgo/**", Acceso.STAFF),
+      regla("*", "/puntos-encuentro/**", Acceso.STAFF),
 
       regla("GET", "/auth/me", Acceso.AUTENTICADO),
 

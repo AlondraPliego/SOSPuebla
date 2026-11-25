@@ -250,15 +250,15 @@ export default function AlertaEntrante({ alerta, onCerrar, onResponder }) {
               {
                 id: alerta.id,
                 nombre: alerta.puntoEncuentro,
-                direccion: alerta.zona,
-                lat: alerta.lat,
-                lng: alerta.lng,
+                direccion: alerta.puntoDireccion || alerta.zona,
+                lat: alerta.puntoLat ?? alerta.lat,
+                lng: alerta.puntoLng ?? alerta.lng,
               },
             ]}
             seleccionado={{
               id: alerta.id,
-              lat: alerta.lat,
-              lng: alerta.lng,
+              lat: alerta.puntoLat ?? alerta.lat,
+              lng: alerta.puntoLng ?? alerta.lng,
             }}
             onSelect={() => {}}
           />
@@ -268,10 +268,13 @@ export default function AlertaEntrante({ alerta, onCerrar, onResponder }) {
               <div>
                 <p className="text-[11px] font-bold uppercase text-dorado">Punto de encuentro</p>
                 <p className="text-sm font-bold text-gray-900">{alerta.puntoEncuentro}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{alerta.zona}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{alerta.puntoDireccion || alerta.zona}</p>
+                {alerta.puntoIndicaciones && (
+                  <p className="text-xs text-gray-700 mt-1.5 leading-relaxed">{alerta.puntoIndicaciones}</p>
+                )}
               </div>
               <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${alerta.lat},${alerta.lng}`}
+                href={`https://www.google.com/maps/dir/?api=1&destination=${alerta.puntoLat ?? alerta.lat},${alerta.puntoLng ?? alerta.lng}`}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-1 bg-guinda text-white text-xs font-bold px-3 py-2 rounded-lg shrink-0"

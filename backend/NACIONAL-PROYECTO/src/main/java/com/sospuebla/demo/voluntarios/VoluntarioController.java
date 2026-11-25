@@ -4,6 +4,8 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
+import com.sospuebla.demo.auth.Alcance;
 
 @RestController
 @RequestMapping("/voluntarios")
@@ -46,7 +48,9 @@ public class VoluntarioController {
   }
 
   @PatchMapping("/{id}/aprobacion")
-  public VoluntarioDto aprobacion(@PathVariable Long id, @RequestBody AprobacionRequest r) {
+  public VoluntarioDto aprobacion(HttpServletRequest req, @PathVariable Long id, @RequestBody AprobacionRequest r) {
+    // el operador municipal sólo aprueba o rechaza voluntarios de su municipio
+    Alcance.exigir(Alcance.de(req), svc.obtener(id).municipio);
     return VoluntarioDto.de(svc.cambiarAprobacion(id, r.estatus()));
   }
 

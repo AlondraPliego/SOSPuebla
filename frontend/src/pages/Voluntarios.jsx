@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { iniciarSesionApp } from "../components/MiCuenta";
 import RadarDijes from "../components/RadarDijes";
+import PuntoEncuentroVoluntario from "../components/PuntoEncuentroVoluntario";
 import { MUNICIPIOS, etiquetaCategoria } from "../api/mapeos";
 import {
   Flame,
@@ -213,6 +214,8 @@ function perfilParaGafete(v) {
     categoria: aportesTexto !== undefined ? titulo : (v.categorias || []).map(etiquetaCategoria).join(", "),
     aportes: aportesTexto ? aportesTexto.split(" · ") : [],
     municipio: v.municipio,
+    lat: v.lat,
+    lng: v.lng,
     folio: `VOL-PUE-${String(v.id).padStart(4, "0")}`,
     estatus: v.estatus_aprobacion,
     disponible: v.disponible,
@@ -894,6 +897,12 @@ export default function Voluntarios({ sesion, onSesion, onAbrirCuenta, modoInici
               {sesionActiva.disponible ? "Disponible" : "No disponible"}
             </button>
           </div>
+
+          <PuntoEncuentroVoluntario
+            municipio={sesionActiva.municipio}
+            lat={sesionActiva.lat}
+            lng={sesionActiva.lng}
+          />
 
           {sesionActiva.estatus === "aprobado" ? (
             <RadarDijes />

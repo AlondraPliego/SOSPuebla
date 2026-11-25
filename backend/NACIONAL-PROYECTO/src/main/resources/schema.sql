@@ -6,6 +6,7 @@
 -- esta habilitado (ver application.yml)
 -- =====================================================================
 
+DROP TABLE IF EXISTS operadores;
 DROP TABLE IF EXISTS sos_reportes;
 DROP TABLE IF EXISTS ciudadanos;
 DROP TABLE IF EXISTS bitacora;
@@ -196,3 +197,69 @@ CREATE TABLE IF NOT EXISTS sos_reportes (
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_sos_estado ON sos_reportes(estado);
+
+-- =====================================================================
+-- Operadores municipales y territorio (refugios, zonas de riesgo, puntos de encuentro)
+-- Las tablas del territorio NO se borran al reiniciar: conservan lo que editan los operadores.
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS operadores (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id BIGINT NOT NULL UNIQUE,
+  nombre VARCHAR(150) NOT NULL,
+  correo VARCHAR(150) NOT NULL,
+  telefono VARCHAR(30) NULL,
+  cargo VARCHAR(150) NULL,
+  municipio VARCHAR(120) NOT NULL,
+  estatus VARCHAR(20) NOT NULL DEFAULT 'pendiente',   -- pendiente | aprobado | rechazado | suspendido
+  creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_op_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS refugios (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(150) NOT NULL,
+  municipio VARCHAR(120) NOT NULL,
+  localidad VARCHAR(120) NULL,
+  direccion VARCHAR(250) NULL,
+  lat DOUBLE NOT NULL,
+  lng DOUBLE NOT NULL,
+  capacidad INT NOT NULL DEFAULT 0,
+  ocupados INT NOT NULL DEFAULT 0,
+  estado VARCHAR(20) NOT NULL DEFAULT 'disponible',   -- activo | disponible | lleno | cerrado
+  mascotas BOOLEAN NOT NULL DEFAULT FALSE,
+  telefono VARCHAR(30) NULL,
+  actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS zonas_riesgo (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(150) NOT NULL,
+  tipo VARCHAR(20) NOT NULL,                          -- volcanico | inundacion | deslave | sismo | incendio
+  nivel VARCHAR(10) NOT NULL DEFAULT 'medio',         -- alto | medio | bajo
+  municipio VARCHAR(120) NOT NULL,
+  localidad VARCHAR(120) NULL,
+  lat DOUBLE NOT NULL,
+  lng DOUBLE NOT NULL,
+  radio_m INT NOT NULL DEFAULT 500,
+  descripcion VARCHAR(500) NULL,
+  recomendaciones VARCHAR(2000) NULL,                 -- una recomendación por línea
+  actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS puntos_encuentro (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(150) NOT NULL,
+  municipio VARCHAR(120) NOT NULL,
+  localidad VARCHAR(120) NULL,
+  direccion VARCHAR(250) NULL,
+  lat DOUBLE NOT NULL,
+  lng DOUBLE NOT NULL,
+  indicaciones VARCHAR(500) NULL,
+  responsable VARCHAR(150) NULL,
+  telefono VARCHAR(30) NULL,
+  activo BOOLEAN NOT NULL DEFAULT TRUE,
+  actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- Localidad de los centros de acopio (si la columna ya existe, este paso se ignora)
+ALTER TABLE centros_acopio ADD COLUMN localidad VARCHAR(120) NULL;

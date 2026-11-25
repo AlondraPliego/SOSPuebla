@@ -16,6 +16,8 @@ import Comunidad from "./pages/Comunidad";
 import { api, sesiones, haySesionApp, EVENTO_SESION_EXPIRADA, ROLES_APP } from "./api/client";
 import { suscribir } from "./api/realtime";
 import { alertaParaApp, alertaGenerica } from "./api/mapeos";
+import { distanciaKm } from "./data/localidades";
+import { mismoMunicipio } from "./panel/alcance";
 
 /** Sesión guardada de la app, sólo si es de un rol de la app (ciudadano / voluntario). */
 const sesionInicial = () => {
@@ -60,8 +62,21 @@ export default function App() {
     if (miDije.conectado) miDije.enviar(`AVISO,${tipo || "general"}`).catch(() => {});
   };
 
+  // puntos de encuentro (los designa cada municipio) para indicar a dónde ir en una alerta
+  const puntosRef = useRef([]);
+  useEffect(() => {
+    api.puntosEncuentro().then((p) => (puntosRef.current = p)).catch(() => {});
+  }, []);
+  const puntoParaAlerta = (a) => {
+    const activos = puntosRef.current.filter((p) => p.activo);
+    if (!activos.length || a.lat == null) return null;
+    const delMunicipio = activos.filter((p) => mismoMunicipio(p.municipio, a.municipio));
+    const candidatos = delMunicipio.length ? delMunicipio : activos;
+    return candidatos.reduce((mejor, p) => (distanciaKm(a, p) < distanciaKm(a, mejor) ? p : mejor));
+  };
+
   const mostrarAlertaDelBackend = (detalle) => {
-    const alerta = alertaParaApp(detalle, voluntarioIdRef.current);
+    const alerta = alertaParaApp(detalle, voluntarioIdRef.current, puntoParaAlerta(detalle));
     alertaActivaRef.current = alerta;
     setAlertaActiva(alerta);
   };

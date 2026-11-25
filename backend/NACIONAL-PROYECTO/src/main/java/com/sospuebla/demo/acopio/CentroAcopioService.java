@@ -64,6 +64,11 @@ public class CentroAcopioService {
   }
 
   @Transactional
+  public void borrar(Long id) {
+    repo.delete(obtener(id));
+  }
+
+  @Transactional
   public CentroAcopio borrarNecesidad(Long id, Long nid) {
     var c = obtener(id);
     boolean existia = c.necesidades.removeIf(x -> x.id.equals(nid));
@@ -75,6 +80,7 @@ public class CentroAcopioService {
     c.nombre = r.nombre().trim();
     c.direccion = r.direccion();
     c.municipio = r.municipio();
+    c.localidad = r.localidad();
     c.lat = r.lat();
     c.lng = r.lng();
     c.horario = r.horario();

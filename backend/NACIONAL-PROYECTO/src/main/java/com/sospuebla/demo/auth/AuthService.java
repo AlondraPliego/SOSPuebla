@@ -41,4 +41,12 @@ public class AuthService {
     if (u.isEmpty()) u = usuarios.findByCurpDeVoluntario(id.toUpperCase());
     return u.filter(x -> x.activo && enc.matches(password, x.passwordHash)).orElse(null);
   }
+
+  /** Contraseña correcta pero cuenta inactiva (operador pendiente de aprobación o suspendido). */
+  public Usuario validarInactiva(String identificador, String password) {
+    String id = identificador == null ? "" : identificador.trim();
+    if (id.isEmpty() || password == null) return null;
+    return usuarios.findByUsername(id.toLowerCase())
+        .filter(x -> !x.activo && enc.matches(password, x.passwordHash)).orElse(null);
+  }
 }

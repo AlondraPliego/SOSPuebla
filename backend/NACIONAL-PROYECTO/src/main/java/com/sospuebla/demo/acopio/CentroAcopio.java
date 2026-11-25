@@ -18,6 +18,8 @@ public class CentroAcopio {
   public String direccion;
   @Column(name = "municipio")
   public String municipio;
+  @Column(name = "localidad")
+  public String localidad;
   @Column(name = "lat")
   public Double lat;
   @Column(name = "lng")

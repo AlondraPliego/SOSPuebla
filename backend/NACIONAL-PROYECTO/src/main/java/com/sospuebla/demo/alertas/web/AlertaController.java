@@ -4,6 +4,7 @@ import com.sospuebla.demo.alertas.dto.*;
 import com.sospuebla.demo.alertas.model.EstadoAlerta;
 import com.sospuebla.demo.alertas.service.AlertaService;
 import com.sospuebla.demo.alertas.service.ApiException;
+import com.sospuebla.demo.auth.Alcance;
 import com.sospuebla.demo.auth.JwtService;
 import com.sospuebla.demo.auth.SeguridadInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
@@ -45,7 +46,9 @@ public class AlertaController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public AlertaDetalle crear(@Valid @RequestBody AlertaCreateRequest req) {
+    public AlertaDetalle crear(@Valid @RequestBody AlertaCreateRequest req, HttpServletRequest http) {
+        // operador municipal: sólo alerta a su municipio; el admin estatal, a cualquiera
+        Alcance.exigir(Alcance.de(http), req.municipio());
         return service.crear(req);
     }
 
@@ -65,7 +68,9 @@ public class AlertaController {
     }
 
     @PatchMapping("/{id}/estado")
-    public ResponseEntity<Void> cambiarEstado(@PathVariable Long id, @Valid @RequestBody CambiarEstadoRequest req) {
+    public ResponseEntity<Void> cambiarEstado(@PathVariable Long id, @Valid @RequestBody CambiarEstadoRequest req,
+                                              HttpServletRequest http) {
+        Alcance.exigir(Alcance.de(http), service.obtener(id).municipio());
         service.cambiarEstado(id, EstadoAlerta.valueOf(req.estado()));
         return ResponseEntity.ok().build();
     }
@@ -78,13 +83,15 @@ public class AlertaController {
     // Paso 15: simulador de sismo --------------------------------------
 
     @PostMapping("/simular-sismo")
-    public ResponseEntity<Map<String, String>> simularSismo(@RequestBody(required = false) SimularSismoRequest req) {
+    public ResponseEntity<Map<String, String>> simularSismo(@RequestBody(required = false) SimularSismoRequest req,
+                                                            HttpServletRequest http) {
         SimularSismoRequest r = req == null ? new SimularSismoRequest(null, null, null, null, null) : req;
         String municipio = r.municipio() == null ? "Puebla" : r.municipio();
         double lat = r.lat() == null ? 19.0414 : r.lat();
         double lng = r.lng() == null ? -98.2063 : r.lng();
         double radioKm = r.radioKm() == null ? 15.0 : r.radioKm();
         int segundos = r.segundosCountdown() == null ? 10 : r.segundosCountdown();
+        Alcance.exigir(Alcance.de(http), municipio);
 
         simuladorService.simularSismo(municipio, lat, lng, radioKm, segundos);
         return ResponseEntity.accepted().body(Map.of("mensaje", "Simulacion iniciada, countdown por /topic/sismo/countdown"));
@@ -93,7 +100,9 @@ public class AlertaController {
     // Paso 16: autorizacion de alertas pendientes (NASA / otras fuentes) --
 
     @PostMapping("/{id}/autorizar")
-    public AlertaDetalle autorizar(@PathVariable Long id) {
+    public AlertaDetalle autorizar(@PathVariable Long id, HttpServletRequest http) {
+        // las alertas de la NASA no son de un municipio del catálogo: sólo el admin estatal las autoriza
+        Alcance.exigir(Alcance.de(http), service.obtener(id).municipio());
         return service.autorizar(id);
     }
 

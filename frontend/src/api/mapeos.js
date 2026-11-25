@@ -192,7 +192,7 @@ export function alertaGenerica(p) {
  * @param {object} a  AlertaDetalle (snake_case)
  * @param {number|null} voluntarioId  voluntario con sesión en la app móvil (si hay)
  */
-export function alertaParaApp(a, voluntarioId = null) {
+export function alertaParaApp(a, voluntarioId = null, punto = null) {
   const notificados = a.voluntarios_notificados || [];
   const mio = voluntarioId != null ? notificados.find((v) => v.voluntario_id === voluntarioId) : null;
   const tipo = etiquetaTipo(a.tipo);
@@ -203,7 +203,12 @@ export function alertaParaApp(a, voluntarioId = null) {
     severidad: a.severidad,
     estadoIncidente: ESTADOS_ALERTA[a.estado] || a.estado,
     zona: a.municipio,
-    puntoEncuentro: `Módulo PC · ${a.municipio}`,
+    // punto de encuentro designado por Protección Civil más cercano a la alerta (si hay)
+    puntoEncuentro: punto?.nombre || `Módulo PC · ${a.municipio}`,
+    puntoDireccion: punto ? [punto.localidad, punto.direccion].filter(Boolean).join(" · ") : null,
+    puntoIndicaciones: punto?.indicaciones || null,
+    puntoLat: punto?.lat ?? null,
+    puntoLng: punto?.lng ?? null,
     lat: a.lat,
     lng: a.lng,
     distancia: mio?.distancia_km != null ? `${mio.distancia_km.toFixed(1)} km` : `radio ${a.radio_km} km`,

@@ -139,8 +139,11 @@ export const api = {
   disponibilidadVoluntario: (id, disponible) =>
     app("PATCH", `/voluntarios/${id}/disponibilidad`, { disponible }),
 
-  // Centros de acopio (lectura pública)
+  // Territorio (lectura pública)
   centros: () => app("GET", "/centros-acopio"),
+  refugios: () => app("GET", "/refugios"),
+  zonasRiesgo: () => app("GET", "/zonas-riesgo"),
+  puntosEncuentro: () => app("GET", "/puntos-encuentro"),
 
   // Ciudadano
   registrarCiudadano: (datos) => app("POST", "/ciudadanos", datos),
@@ -152,6 +155,16 @@ export const api = {
   misSos: () => app("GET", "/sos/mios"),
   cancelarSos: (id) => app("POST", `/sos/${id}/cancelar`),
 };
+
+/** CRUD de un recurso del territorio desde el panel. */
+function recurso(ruta) {
+  return {
+    listar: () => panel("GET", ruta),
+    crear: (datos) => panel("POST", ruta, datos),
+    actualizar: (id, datos) => panel("PUT", `${ruta}/${id}`, datos),
+    borrar: (id) => panel("DELETE", `${ruta}/${id}`),
+  };
+}
 
 /** Funciones exclusivas del Panel Web (operador / admin). */
 export const apiPanel = {
@@ -168,8 +181,24 @@ export const apiPanel = {
   voluntarios: () => panel("GET", "/voluntarios"),
   aprobarVoluntario: (id, estatus) => panel("PATCH", `/voluntarios/${id}/aprobacion`, { estatus }),
 
+  // Territorio: el backend sólo deja modificar lo del municipio del operador (el admin, todo)
+  territorio: {
+    puntos: recurso("/puntos-encuentro"),
+    refugios: recurso("/refugios"),
+    zonas: recurso("/zonas-riesgo"),
+    centros: recurso("/centros-acopio"),
+  },
   centros: () => panel("GET", "/centros-acopio"),
   actualizarCentro: (id, datos) => panel("PUT", `/centros-acopio/${id}`, datos),
+  agregarNecesidad: (id, datos) => panel("POST", `/centros-acopio/${id}/necesidades`, datos),
+  borrarNecesidad: (id, nid) => panel("DELETE", `/centros-acopio/${id}/necesidades/${nid}`),
+  refugios: () => panel("GET", "/refugios"),
+  puntosEncuentro: () => panel("GET", "/puntos-encuentro"),
+
+  // Operadores municipales
+  solicitarAcceso: (datos) => panel("POST", "/operadores/registro", datos),
+  operadores: () => panel("GET", "/operadores"),
+  estatusOperador: (id, estatus) => panel("PATCH", `/operadores/${id}/estatus`, { estatus }),
 
   listarSos: (estado) => panel("GET", `/sos${estado ? `?estado=${estado}` : ""}`),
   estadoSos: (id, estado, nota) => panel("PATCH", `/sos/${id}/estado`, { estado, nota }),

@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   BellPlus,
   Users,
-  Package,
   Smartphone,
   CheckCircle2,
   XCircle,
@@ -16,9 +15,16 @@ import {
   Satellite,
   Siren,
   Phone,
+  Map as MapaIcono,
+  UserCog,
+  Lock,
 } from "lucide-react";
 import MapView from "../components/MapView";
-import { refugiosPuebla } from "../data/pueblaData";
+import Territorio from "../panel/Territorio";
+import Operadores from "../panel/Operadores";
+import SolicitudOperador from "../panel/SolicitudOperador";
+import { puedeAdministrar, etiquetaRol, esAdmin, mismoMunicipio } from "../panel/alcance";
+import { MUNICIPIOS_CATALOGO, coordsMunicipio } from "../data/localidades";
 import { apiPanel as api, sesiones, EVENTO_SESION_EXPIRADA, ROLES_PANEL } from "../api/client";
 import { suscribir } from "../api/realtime";
 import {
@@ -27,7 +33,6 @@ import {
   ESTADOS_ALERTA,
   FUENTES_ALERTA,
   CATEGORIAS,
-  MUNICIPIOS,
   etiquetaTipo,
   etiquetaCategoria,
   etiquetaEstatusVoluntario,
@@ -41,7 +46,6 @@ const SOS_ABIERTOS = ["activo", "en_atencion"];
 
 // sólo operador / admin pueden usar el Centro de Mando
 const ROLES_STAFF = ROLES_PANEL;
-const nombreRol = (r) => (r === "admin" ? "Administrador" : r === "operador" ? "Operador" : r);
 
 const estiloSeveridad = {
   critica: "bg-red-100 text-red-800",
@@ -72,12 +76,20 @@ export default function PanelSecretaria() {
   const [password, setPassword] = useState("");
   const [errorLogin, setErrorLogin] = useState("");
   const [entrando, setEntrando] = useState(false);
-  const rol = nombreRol(sesion?.rol);
+  const rol = etiquetaRol(sesion);
+  const [modoAcceso, setModoAcceso] = useState("login"); // login | solicitud
+  const admin = esAdmin(sesion);
+  const puede = (municipio) => puedeAdministrar(sesion, municipio);
+  // el operador ve primero lo de su municipio; puede ver todo el estado en solo lectura
+  const [soloMio, setSoloMio] = useState(true);
+  const deMiMunicipio = (m) => admin || !soloMio || mismoMunicipio(m, sesion?.municipio);
 
   const [vista, setVista] = useState("dashboard");
   const [voluntarios, setVoluntarios] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const [centros, setCentros] = useState([]);
+  const [refugios, setRefugios] = useState([]);
+  const [puntos, setPuntos] = useState([]);
   const [alertasFeed, setAlertasFeed] = useState([]);
   const [resumen, setResumen] = useState(null);
   const [sosLista, setSosLista] = useState([]);
@@ -87,7 +99,7 @@ export default function PanelSecretaria() {
 
   const [tipoAlerta, setTipoAlerta] = useState("sismo");
   const [severidad, setSeveridad] = useState("critica");
-  const [zona, setZona] = useState("Puebla");
+  const [zona, setZona] = useState(() => sesiones.panel()?.municipio || "Puebla");
   const [radioKm, setRadioKm] = useState(5);
   const [categoriasAlerta, setCategoriasAlerta] = useState([]);
   const [mensaje, setMensaje] = useState(
@@ -114,6 +126,7 @@ export default function PanelSecretaria() {
     return () => window.removeEventListener(EVENTO_SESION_EXPIRADA, alExpirar);
   }, []);
 
+  const avisar = useCallback((tipo, texto) => setAviso({ tipo, texto }), []);
   const mostrarError = (e) => setAviso({ tipo: "error", texto: e.message || String(e) });
 
   // ------------------------------------------------------------------
@@ -127,12 +140,16 @@ export default function PanelSecretaria() {
 
   const cargarTodo = useCallback(async () => {
     setCargando(true);
-    const [rAlertas, rVol, rCentros, rSos] = await Promise.allSettled([
+    const [rAlertas, rVol, rCentros, rSos, rRef, rPun] = await Promise.allSettled([
       cargarAlertas(),
       api.voluntarios(),
       api.centros(),
       api.listarSos(),
+      api.refugios(),
+      api.puntosEncuentro(),
     ]);
+    if (rRef.status === "fulfilled") setRefugios(rRef.value);
+    if (rPun.status === "fulfilled") setPuntos(rPun.value);
     if (rVol.status === "fulfilled") setVoluntarios(rVol.value.map(filaVoluntario));
     if (rCentros.status === "fulfilled") setCentros(rCentros.value);
     if (rSos.status === "fulfilled") setSosLista(rSos.value);
@@ -208,7 +225,7 @@ export default function PanelSecretaria() {
 
   const handleEmitirManual = async (e) => {
     e.preventDefault();
-    const municipio = MUNICIPIOS.find((m) => m.nombre === zona) || MUNICIPIOS[0];
+    const municipio = { nombre: zona, ...coordsMunicipio(zona) };
     setEmitiendo(true);
     setAviso(null);
     try {
@@ -238,7 +255,8 @@ export default function PanelSecretaria() {
     setAviso(null);
     try {
       setCuentaRegresiva(10);
-      await api.simularSismo({ municipio: "Puebla", lat: 19.0414, lng: -98.2063, radio_km: 15, segundos_countdown: 10 });
+      // el sismo se simula en el municipio elegido (el operador, siempre en el suyo)
+      await api.simularSismo({ municipio: zona, ...coordsMunicipio(zona), radio_km: 15, segundos_countdown: 10 });
       // respaldo: si el countdown por WebSocket no llega, se libera el botón
       setTimeout(() => {
         if (cuentaRef.current !== null) {
@@ -279,27 +297,6 @@ export default function PanelSecretaria() {
     }
   };
 
-  const toggleCentro = async (id) => {
-    const c = centros.find((x) => x.id === id);
-    if (!c) return;
-    try {
-      const actualizado = await api.actualizarCentro(id, {
-        nombre: c.nombre,
-        direccion: c.direccion,
-        municipio: c.municipio,
-        lat: c.lat,
-        lng: c.lng,
-        horario: c.horario,
-        telefono: c.telefono,
-        responsable: c.responsable,
-        abierto: !c.abierto,
-      });
-      setCentros((prev) => prev.map((x) => (x.id === id ? actualizado : x)));
-      api.resumen().then(setResumen).catch(() => {});
-    } catch (err) {
-      mostrarError(err);
-    }
-  };
 
   const cambiarEstadoSos = async (id, estado) => {
     try {
@@ -338,6 +335,9 @@ export default function PanelSecretaria() {
             </a>
           </div>
 
+          {modoAcceso === "solicitud" ? (
+            <SolicitudOperador onVolver={() => setModoAcceso("login")} />
+          ) : (
           <form onSubmit={iniciarSesion} className="space-y-3">
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">
@@ -366,7 +366,7 @@ export default function PanelSecretaria() {
             </div>
 
             <p className="text-[11px] text-gray-500">
-              El rol de acceso (Operador de Monitoreo o Administrador Estatal) se asigna según tu cuenta.
+              El administrador estatal ve todo el estado; cada operador municipal administra su municipio.
             </p>
 
             {errorLogin && (
@@ -382,7 +382,21 @@ export default function PanelSecretaria() {
             >
               {entrando ? "Verificando..." : "Ingresar al Centro de Mando"}
             </button>
+
+            <div className="pt-2 border-t border-gray-100 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorLogin("");
+                  setModoAcceso("solicitud");
+                }}
+                className="text-xs font-bold text-guinda hover:underline"
+              >
+                ¿Eres autoridad municipal? Solicita acceso de operador
+              </button>
+            </div>
           </form>
+          )}
         </div>
       </div>
     );
@@ -390,22 +404,37 @@ export default function PanelSecretaria() {
 
   const voluntariosFiltrados = voluntarios.filter(
     (v) =>
-      v.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-      v.municipio.toLowerCase().includes(busqueda.toLowerCase()) ||
-      v.categoria.toLowerCase().includes(busqueda.toLowerCase())
+      deMiMunicipio(v.municipio) &&
+      (v.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+        v.municipio.toLowerCase().includes(busqueda.toLowerCase()) ||
+        v.categoria.toLowerCase().includes(busqueda.toLowerCase()))
+  );
+
+  // interruptor "solo mi municipio / todo el estado" (sólo para el operador municipal)
+  const filtroMunicipio = !admin && sesion?.municipio && (
+    <label className="flex items-center gap-2 text-[11px] font-semibold text-gray-600 shrink-0">
+      <input type="checkbox" checked={soloMio} onChange={(e) => setSoloMio(e.target.checked)} className="accent-guinda" />
+      Solo {sesion.municipio}
+    </label>
   );
 
   const activosCount =
     resumen?.voluntarios_registrados ?? voluntarios.filter((v) => v.estatus === "Activo").length;
-  const pendientesCount = voluntarios.filter((v) => v.estatus === "Pendiente").length;
+  const pendientesCount = voluntarios.filter((v) => v.estatus === "Pendiente" && puede(v.municipio)).length;
   const centrosAbiertos = resumen?.centros_abiertos ?? centros.filter((c) => c.abierto).length;
   const alertasVigentes = alertasFeed.filter((a) => a.estado !== "cerrada");
-  const sosAbiertos = sosLista.filter((s) => SOS_ABIERTOS.includes(s.estado));
+  const sosAbiertos = sosLista.filter((s) => SOS_ABIERTOS.includes(s.estado) && deMiMunicipio(s.municipio));
   const alertasActivasCount =
     resumen?.alertas_activas ?? alertasFeed.filter((a) => a.estado === "activa" || a.estado === "en_atencion").length;
 
   const puntosMapa = [
-    ...refugiosPuebla.map((r) => ({ ...r, id: `r-${r.id}` })),
+    ...refugios.map((r) => ({ ...r, id: `r-${r.id}` })),
+    ...puntos.map((p) => ({
+      ...p,
+      id: `p-${p.id}`,
+      nombre: `Punto de encuentro: ${p.nombre}`,
+      color: "#2563eb",
+    })),
     ...centros.map((c) => ({ ...c, id: `c-${c.id}` })),
     ...alertasVigentes
       .filter((a) => a.lat != null && a.lng != null)
@@ -479,8 +508,9 @@ export default function PanelSecretaria() {
               label: `Voluntarios (${pendientesCount} pendientes)`,
               icon: Users,
             },
-            { id: "centros", label: "Centros de Acopio", icon: Package },
+            { id: "territorio", label: "Territorio", icon: MapaIcono },
             { id: "sos", label: `SOS Ciudadano (${sosAbiertos.length} abiertos)`, icon: Siren },
+            ...(admin ? [{ id: "operadores", label: "Operadores", icon: UserCog }] : []),
           ].map((item) => {
             const Icon = item.icon;
             return (
@@ -638,6 +668,14 @@ export default function PanelSecretaria() {
                             {notificados.length} notificados · {confirmados} confirmaron
                           </p>
                         )}
+                        {!puede(alerta.municipio) ? (
+                          <p className="flex items-center gap-1 text-[10px] text-gray-400 pt-1">
+                            <Lock className="w-3 h-3" />
+                            {alerta.fuente === "nasa_eonet"
+                              ? "Las alertas de la NASA las autoriza el administrador estatal"
+                              : "Otro municipio · solo lectura"}
+                          </p>
+                        ) : (
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {alerta.estado === "pendiente" && (
                             <button
@@ -671,6 +709,7 @@ export default function PanelSecretaria() {
                             {alerta.estado === "pendiente" ? "Descartar" : "Cerrar"}
                           </button>
                         </div>
+                        )}
                       </div>
                     );
                   })}
@@ -734,11 +773,13 @@ export default function PanelSecretaria() {
                   <select
                     value={zona}
                     onChange={(e) => setZona(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg bg-white"
+                    disabled={!admin}
+                    title={admin ? "" : "Como operador municipal solo emites alertas en tu municipio"}
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg bg-white disabled:bg-fondo"
                   >
-                    {MUNICIPIOS.map((m) => (
-                      <option key={m.nombre} value={m.nombre}>
-                        {m.nombre}
+                    {MUNICIPIOS_CATALOGO.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
                       </option>
                     ))}
                   </select>
@@ -814,7 +855,7 @@ export default function PanelSecretaria() {
                 </span>
                 <h3 className="text-base font-bold">Simulador de Sismo</h3>
                 <p className="text-xs text-gray-300 leading-relaxed">
-                  Inicia una cuenta regresiva de 10 segundos y dispara automáticamente la pantalla de alerta crítica en la app de ciudadanos y voluntarios.
+                  Inicia una cuenta regresiva de 10 segundos y dispara automáticamente la pantalla de alerta crítica en la app de ciudadanos y voluntarios de <strong className="text-white">{zona}</strong>.
                 </p>
               </div>
 
@@ -842,6 +883,7 @@ export default function PanelSecretaria() {
               <h2 className="text-sm font-bold text-gray-900">
                 Padrón y Solicitudes de Voluntariado
               </h2>
+              {filtroMunicipio}
               <div className="relative w-full md:w-64">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
                 <input
@@ -876,7 +918,7 @@ export default function PanelSecretaria() {
                       {v.estatus}
                     </span>
                   </div>
-                  {v.estatus === "Pendiente" && (
+                  {v.estatus === "Pendiente" && puede(v.municipio) && (
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => cambiarEstatusVoluntario(v.id, "aprobado")}
@@ -939,7 +981,7 @@ export default function PanelSecretaria() {
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right">
-                        {v.estatus === "Pendiente" ? (
+                        {v.estatus === "Pendiente" && puede(v.municipio) ? (
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => cambiarEstatusVoluntario(v.id, "aprobado")}
@@ -957,7 +999,9 @@ export default function PanelSecretaria() {
                             </button>
                           </div>
                         ) : (
-                          <span className="text-[11px] text-gray-400">Gestionado</span>
+                          <span className="text-[11px] text-gray-400">
+                            {puede(v.municipio) ? "Gestionado" : "Otro municipio"}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -977,7 +1021,7 @@ export default function PanelSecretaria() {
           <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-bold text-gray-900">Solicitudes de Auxilio (SOS) · Ciudadanos</h2>
-              <span className="text-xs text-gray-500">En tiempo real</span>
+              {filtroMunicipio || <span className="text-xs text-gray-500">En tiempo real</span>}
             </div>
 
             {sosLista.length === 0 && (
@@ -987,7 +1031,7 @@ export default function PanelSecretaria() {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {sosLista.map((s) => {
+              {sosLista.filter((s) => deMiMunicipio(s.municipio)).map((s) => {
                 const abierto = SOS_ABIERTOS.includes(s.estado);
                 return (
                   <div
@@ -1063,7 +1107,12 @@ export default function PanelSecretaria() {
                       {s.nota && <p className="text-gray-800">Nota: {s.nota}</p>}
                     </div>
 
-                    {abierto && (
+                    {abierto && !puede(s.municipio) && (
+                      <p className="flex items-center gap-1 text-[10px] text-gray-400 pt-1">
+                        <Lock className="w-3 h-3" /> Lo atiende Protección Civil de {s.municipio || "su municipio"}
+                      </p>
+                    )}
+                    {abierto && puede(s.municipio) && (
                       <div className="space-y-1.5 pt-1">
                         <input
                           type="text"
@@ -1103,54 +1152,9 @@ export default function PanelSecretaria() {
           </div>
         )}
 
-        {vista === "centros" && (
-          <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-4">
-            <h2 className="text-sm font-bold text-gray-900">
-              Control de Centros de Acopio · Puebla
-            </h2>
+        {vista === "territorio" && <Territorio sesion={sesion} onAviso={avisar} />}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {centros.map((centro) => (
-                <div
-                  key={centro.id}
-                  className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-3"
-                >
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-900">{centro.nombre}</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">{centro.direccion}</p>
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      Horario: {centro.horario} · Tel: {centro.telefono}
-                    </p>
-                    {centro.necesidades?.length > 0 && (
-                      <p className="text-[11px] text-gray-500 mt-1">
-                        Necesita:{" "}
-                        {centro.necesidades
-                          .map((n) => (n.prioridad === "urgente" ? `${n.item} (urgente)` : n.item))
-                          .join(", ")}
-                      </p>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => toggleCentro(centro.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 transition ${
-                      centro.abierto
-                        ? "bg-green-700 text-white"
-                        : "bg-gray-200 text-gray-700"
-                    }`}
-                  >
-                    {centro.abierto ? "Abierto" : "Cerrado"}
-                  </button>
-                </div>
-              ))}
-              {centros.length === 0 && (
-                <p className="text-xs text-gray-500">
-                  {cargando ? "Cargando centros..." : "No hay centros de acopio registrados."}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
+        {vista === "operadores" && admin && <Operadores onAviso={avisar} />}
       </div>
     </div>
   );

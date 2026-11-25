@@ -18,9 +18,13 @@ import io.jsonwebtoken.security.Keys;
 public class JwtService {
 
   /** Quién hace la petición, según su token. */
-  public record Identidad(Long usuarioId, String rol, Long voluntarioId) {
+  /** municipio: sólo para operadores municipales (el admin estatal no tiene, ve todo el estado). */
+  public record Identidad(Long usuarioId, String rol, Long voluntarioId, String municipio) {
     public boolean esStaff() {
       return "operador".equals(rol) || "admin".equals(rol);
+    }
+    public boolean esAdmin() {
+      return "admin".equals(rol);
     }
   }
 
@@ -35,6 +39,10 @@ public class JwtService {
   }
 
   public String crear(Usuario u, String rol) {
+    return crear(u, rol, null);
+  }
+
+  public String crear(Usuario u, String rol, String municipio) {
     long ahora = System.currentTimeMillis();
     JwtBuilder b = Jwts.builder()
         .subject(String.valueOf(u.id))
@@ -42,6 +50,7 @@ public class JwtService {
         .issuedAt(new Date(ahora))
         .expiration(new Date(ahora + duracionMs));
     if (u.voluntarioId != null) b.claim("voluntario_id", u.voluntarioId);
+    if (municipio != null) b.claim("municipio", municipio);
     return b.signWith(key).compact();
   }
 
@@ -60,7 +69,8 @@ public class JwtService {
       return new Identidad(
           Long.valueOf(c.getSubject()),
           c.get("rol", String.class),
-          vid instanceof Number n ? n.longValue() : null);
+          vid instanceof Number n ? n.longValue() : null,
+          c.get("municipio", String.class));
     } catch (JwtException | IllegalArgumentException e) {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Token inválido o vencido");
     }

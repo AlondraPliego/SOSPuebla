@@ -8,6 +8,7 @@ public record CentroRequest(
     @NotBlank String nombre,
     String direccion,
     String municipio,
+    String localidad,
     Double lat,
     Double lng,
     String horario,

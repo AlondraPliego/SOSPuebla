@@ -11,6 +11,8 @@ import com.sospuebla.demo.alertas.service.ApiException;
 import com.sospuebla.demo.auth.JwtService;
 import com.sospuebla.demo.ciudadanos.Ciudadano;
 import com.sospuebla.demo.ciudadanos.CiudadanoRepo;
+import com.sospuebla.demo.auth.Alcance;
+import com.sospuebla.demo.core.Municipios;
 import com.sospuebla.demo.sos.SosDtos.SosDto;
 import com.sospuebla.demo.sos.SosDtos.SosRequest;
 
@@ -69,6 +71,8 @@ public class SosService {
     }
     if (s.lat == null && blanco(s.municipio))
       throw new ApiException(HttpStatus.BAD_REQUEST, "Se requiere ubicación (lat/lng) o municipio");
+    // sin municipio (p. ej. SOS anónimo con GPS): el más cercano, para que lo atienda su operador municipal
+    if (blanco(s.municipio)) s.municipio = Municipios.masCercano(s.lat, s.lng);
     if (blanco(s.nombre)) s.nombre = "Ciudadano sin registro";
 
     s = repo.save(s);
@@ -98,6 +102,7 @@ public class SosService {
     if (estado == null || !ESTADOS.contains(estado))
       throw new ApiException(HttpStatus.BAD_REQUEST, "Estado inválido");
     var s = buscar(sosId);
+    Alcance.exigir(id, s.municipio);   // el operador sólo atiende los SOS de su municipio
     s.estado = estado;
     if (nota != null) s.nota = nota;
     if (id != null) s.atendidoPor = id.usuarioId();

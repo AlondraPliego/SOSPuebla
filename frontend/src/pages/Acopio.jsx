@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   MapPin,
   Clock,
@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { catalogoAportaciones } from "../data/pueblaData";
 import MapView from "../components/MapView";
+import ListaPorLocalidad, { textoDistancia } from "../components/ListaPorLocalidad";
+import { ubicarLugar, aplicarFiltro, distanciaKm } from "../data/localidades";
 import { api } from "../api/client";
 import { PRIORIDADES } from "../api/mapeos";
 
@@ -21,7 +23,7 @@ const estiloPrioridad = {
   suficiente: "bg-green-50 text-green-800 border-green-200",
 };
 
-export default function Acopio() {
+export default function Acopio({ filtro, ubicacion, onVerTodo }) {
   const [centrosAcopioPuebla, setCentros] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState("");
@@ -31,12 +33,27 @@ export default function Acopio() {
     api
       .centros()
       .then((lista) => {
-        setCentros(lista);
-        setCentroSeleccionado(lista.find((c) => c.abierto) || lista[0] || null);
+        // cada centro se ubica en su municipio y su localidad (la más cercana a sus coordenadas)
+        const ubicados = lista.map((c) =>
+          ubicarLugar({ ...c, necesidadesTexto: c.necesidades.map((n) => n.item).join(" ") })
+        );
+        setCentros(ubicados);
+        setCentroSeleccionado(ubicados.find((c) => c.abierto) || ubicados[0] || null);
       })
       .catch((e) => setErrorCarga(e.message))
       .finally(() => setCargando(false));
   }, []);
+  const centrosFiltrados = useMemo(
+    () => aplicarFiltro(centrosAcopioPuebla, filtro, ["necesidadesTexto"]),
+    [centrosAcopioPuebla, filtro]
+  );
+  // centro activo: el elegido si sigue en el filtro; si no, el más cercano de los filtrados
+  const cercanoFiltrado =
+    ubicacion?.estado === "ok"
+      ? [...centrosFiltrados].sort((a, b) => distanciaKm(ubicacion, a) - distanciaKm(ubicacion, b))[0]
+      : centrosFiltrados[0];
+  const centroActivo =
+    centrosFiltrados.find((c) => c.id === centroSeleccionado?.id) || cercanoFiltrado || centroSeleccionado;
   const [tipoAporte, setTipoAporte] = useState("comida");
   const [itemsSeleccionados, setItemsSeleccionados] = useState([]);
   const [monto, setMonto] = useState("200");
@@ -64,7 +81,7 @@ export default function Acopio() {
     setConfirmacion({
       folio,
       tipo: tipoAporte,
-      centro: centroSeleccionado.nombre,
+      centro: centroActivo.nombre,
       detalle:
         tipoAporte === "monetario"
           ? `$${monto} MXN (Fondo de Contingencia Puebla)`
@@ -90,9 +107,10 @@ export default function Acopio() {
     <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
       <div className="space-y-5">
       <MapView
-        puntos={centrosAcopioPuebla}
-        seleccionado={centroSeleccionado}
+        puntos={centrosFiltrados}
+        seleccionado={centrosFiltrados.length ? centroActivo : null}
         onSelect={setCentroSeleccionado}
+        ubicacion={ubicacion}
       />
 
       <section className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-4">
@@ -180,7 +198,7 @@ export default function Acopio() {
               <>
                 <div className="bg-fondo rounded-lg p-2.5 border border-gray-200 text-xs">
                   <span className="text-gray-500">Entregar en: </span>
-                  <strong className="text-guinda">{centroSeleccionado.nombre}</strong>
+                  <strong className="text-guinda">{centroActivo.nombre}</strong>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -279,72 +297,92 @@ export default function Acopio() {
 
       <section className="space-y-3">
         <h2 className="text-xs font-bold uppercase tracking-wide text-gray-600">
-          Centros de Acopio Habilitados en Puebla ({centrosAcopioPuebla.length})
+          Centros de acopio ({centrosFiltrados.length})
         </h2>
 
-        {centrosAcopioPuebla.map((centro) => {
-          const esActivo = centroSeleccionado.id === centro.id;
-          return (
-            <div
-              key={centro.id}
-              onClick={() => setCentroSeleccionado(centro)}
-              className={`bg-white rounded-xl p-4 border shadow-sm cursor-pointer transition ${
-                esActivo ? "border-guinda ring-1 ring-guinda/30" : "border-gray-200"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="font-bold text-gray-900 text-sm">{centro.nombre}</h3>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
-                    centro.abierto
-                      ? "bg-green-50 text-green-800 border-green-200"
-                      : "bg-gray-100 text-gray-600 border-gray-200"
-                  }`}
-                >
-                  {centro.abierto ? "Abierto" : "Cerrado"}
-                </span>
-              </div>
-
-              <p className="text-xs text-gray-600 mt-1 flex items-start gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-guinda shrink-0 mt-0.5" />
-                <span>{centro.direccion}</span>
-              </p>
-
-              <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-dorado" />
-                <span>Horario: {centro.horario}</span>
-              </p>
-
-              <div className="flex flex-wrap gap-1.5 mt-2.5">
-                {centro.necesidades.map((nec) => (
+        <ListaPorLocalidad
+          items={centrosFiltrados}
+          ubicacion={ubicacion}
+          vacio={
+            <>
+              No hay centros de acopio con este filtro.{" "}
+              <button onClick={onVerTodo} className="font-bold text-guinda underline">
+                Ver todo el estado
+              </button>
+            </>
+          }
+          render={(centro) => {
+            const esActivo = centroActivo.id === centro.id;
+            return (
+              <div
+                key={centro.id}
+                onClick={() => setCentroSeleccionado(centro)}
+                className={`bg-white rounded-xl p-4 border shadow-sm cursor-pointer transition ${
+                  esActivo ? "border-guinda ring-1 ring-guinda/30" : "border-gray-200"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                  {centro.distanciaKm != null && (
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-dorado">
+                      {textoDistancia(centro.distanciaKm)} de ti
+                    </span>
+                  )}
+                  <h3 className="font-bold text-gray-900 text-sm">{centro.nombre}</h3>
+                </div>
                   <span
-                    key={nec.id}
-                    title={PRIORIDADES[nec.prioridad] || nec.prioridad}
-                    className={`text-[10px] border px-2 py-0.5 rounded-md ${
-                      estiloPrioridad[nec.prioridad] || estiloPrioridad.normal
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                      centro.abierto
+                        ? "bg-green-50 text-green-800 border-green-200"
+                        : "bg-gray-100 text-gray-600 border-gray-200"
                     }`}
                   >
-                    {nec.item}
-                    {nec.prioridad === "urgente" && " · Urgente"}
+                    {centro.abierto ? "Abierto" : "Cerrado"}
                   </span>
-                ))}
+                </div>
+  
+                <p className="text-xs text-gray-600 mt-1 flex items-start gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-guinda shrink-0 mt-0.5" />
+                  <span>{centro.direccion}</span>
+                </p>
+  
+                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-dorado" />
+                  <span>Horario: {centro.horario}</span>
+                </p>
+  
+                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                  {centro.necesidades.map((nec) => (
+                    <span
+                      key={nec.id}
+                      title={PRIORIDADES[nec.prioridad] || nec.prioridad}
+                      className={`text-[10px] border px-2 py-0.5 rounded-md ${
+                        estiloPrioridad[nec.prioridad] || estiloPrioridad.normal
+                      }`}
+                    >
+                      {nec.item}
+                      {nec.prioridad === "urgente" && " · Urgente"}
+                    </span>
+                  ))}
+                </div>
+  
+                <div className="mt-3 pt-2.5 border-t border-gray-100 flex justify-end">
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${centro.lat},${centro.lng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 bg-guinda hover:bg-guindaDark text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+                  >
+                    <Navigation className="w-3.5 h-3.5" />
+                    <span>Ir al centro</span>
+                  </a>
+                </div>
               </div>
-
-              <div className="mt-3 pt-2.5 border-t border-gray-100 flex justify-end">
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${centro.lat},${centro.lng}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-1 bg-guinda hover:bg-guindaDark text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-                >
-                  <Navigation className="w-3.5 h-3.5" />
-                  <span>Ir al centro</span>
-                </a>
-              </div>
-            </div>
-          );
-        })}
+  
+            );
+          }}
+        />
       </section>
     </div>
   );
