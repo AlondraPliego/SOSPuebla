@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 
@@ -23,13 +24,21 @@ public class EonetSyncService {
     private final AlertaRepo alertaRepo;
     private final AlertaService alertaService;
     private final RestClient restClient;
+    private final String bbox;
+    // EONET responde JSON pero con Content-Type "application/rss+xml", así que Spring no lo
+    // convierte solo: se lee como texto y se interpreta con este mapper propio.
+    private final JsonMapper json = JsonMapper.builder().build();
 
     public EonetSyncService(AlertaRepo alertaRepo,
                              AlertaService alertaService,
-                             @Value("${eonet.base-url}") String baseUrl) {
+                             @Value("${eonet.base-url}") String baseUrl,
+                             // Zona a vigilar (oeste,norte,este,sur). Por defecto: centro de México /
+                             // Puebla. Sin este filtro EONET devuelve miles de eventos de todo el mundo.
+                             @Value("${eonet.bbox:-100.5,21.0,-96.5,17.5}") String bbox) {
         this.alertaRepo = alertaRepo;
         this.alertaService = alertaService;
         this.restClient = RestClient.builder().baseUrl(baseUrl).build();
+        this.bbox = bbox;
     }
 
     // --- DTOs minimos para deserializar la respuesta de EONET ---
@@ -53,10 +62,15 @@ public class EonetSyncService {
      * operador autorice la alerta (POST /alertas/{id}/autorizar).
      */
     public int sincronizar(double radioKmDefault) {
-        EonetResponse resp = restClient.get()
-                .uri(uriBuilder -> uriBuilder.path("/events").queryParam("status", "open").build())
+        String cuerpo = restClient.get()
+                .uri(uriBuilder -> uriBuilder.path("/events")
+                        .queryParam("status", "open")
+                        .queryParam("bbox", bbox)
+                        .build())
                 .retrieve()
-                .body(EonetResponse.class);
+                .body(String.class);
+        if (cuerpo == null || cuerpo.isBlank()) return 0;
+        EonetResponse resp = json.readValue(cuerpo, EonetResponse.class);
 
         if (resp == null || resp.events() == null) return 0;
 
