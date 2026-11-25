@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: demo
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+  datasource:
+    url: jdbc:mysql://localhost:3306/emergencias?useSSL=false&serverTimezone=America/Mexico_City&allowPublicKeyRetrieval=true
+    username: root
+    password: Myss2119.
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none        # el esquema lo maneja schema.sql, no Hibernate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  sql:
+    init:
+      mode: always          # ejecuta schema.sql / data.sql al arrancar (ambiente local/demo)
+      continue-on-error: true
+
+server:
+  port: 8080
+
+logging:
+  level:
+    org.hibernate.SQL: debug
+
+# Integracion NASA EONET (Fase 4)
+eonet:
+  base-url: https://eonet.gsfc.nasa.gov/api/v3
+jwt:
+  secret: "K7#mP9@xL2!vQ8$zR4&nT6*wB3^cY521"
+  horas: 12
